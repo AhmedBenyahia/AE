@@ -1,0 +1,5 @@
+{
+  "jwtPrivateKey": "This is a test",
+  "db": "mongodb+srv://dev:AutoEcole.TN@cluster0.ftvww.mongodb.net/<dbname>?retryWrites=true&w=majority"
+
+}
