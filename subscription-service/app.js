@@ -20,7 +20,7 @@ handleRejection();
 
 // Register the service in eureka register
 // TODO: uncomment this in prod
-// eurekaHelper.registerWithEureka('subscription-service', process.env.PORT || '3000');
+eurekaHelper.registerWithEureka('subscription-service', process.env.PORT || '3000');
 
 
 

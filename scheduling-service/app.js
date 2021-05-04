@@ -22,7 +22,7 @@ handleRejection();
 
 // Register the service in eureka register
 // TODO: uncomment this in prod
-// eurekaHelper.registerWithEureka('scheduling-service', process.env.PORT || '3000');
+eurekaHelper.registerWithEureka('scheduling-service', process.env.PORT || '3000');
 
 
 
