@@ -40,7 +40,8 @@ const userSchema = new mongoose.Schema({
     isConfirmed: {type: Boolean,},
     isActive: {type: Boolean,},
     role: {type: String},
-    avatar: {type: String}
+    avatar: {type: String},
+    agency: mongoose.Types.ObjectId,
 });
 
 function validateSchema(car) {
@@ -54,6 +55,7 @@ function validateSchema(car) {
         isActive:  JoiExtended.bool().required(),
         role: JoiExtended.string().required(),
         avatar: JoiExtended.string().max(255),
+        agency: JoiExtended.string().objectId()
     });
     return schema.validate(car);
 }
