@@ -6,6 +6,7 @@
     "start": "nodemon bin/www"
   },
   "dependencies": {
+    "auth0-js": "^9.16.0",
     "compression": "^1.7.4",
     "config": "^3.3.6",
     "cookie-parser": "~1.4.4",

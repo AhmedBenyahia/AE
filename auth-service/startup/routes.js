@@ -5,7 +5,7 @@ const  {requiresAuth} = require ('express-openid-connect');
 // routes imports goes here
 const user = require('../routes/users')
 const logging = require('../middleware/req-log');
-
+const auth0 = require('auth0-js')
 
 const cors = require('cors');
 
@@ -48,6 +48,7 @@ module.exports = (app) => {
     app.get('/', (req, res) => {
         res.send(req.oidc.isAuthenticated() ? 'Logged in' : 'Logged out');
     });
+
 
     app.get('/profile', requiresAuth(), (req, res) => {
         res.send(JSON.stringify(req.oidc.user));

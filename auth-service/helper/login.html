@@ -1,0 +1,38 @@
+<!-- popup_response_handler.html -->
+<html>
+<body>
+<script src="https://cdn.auth0.com/js/auth0/9.11/auth0.min.js"></script>
+<script type="text/javascript">
+    function login(redirectUri, email, password) {
+        let webAuth = new auth0.WebAuth({
+            domain: 'sayto.eu.auth0.com',
+            clientID: 'd8Q6NjdtQt69KHypYoZiW2AeQRA5O9Cz',
+            responseType: 'token id_token',
+            audience: 'http://localhost:3004',
+            redirectUri: 'http://localhost:63342/AE/auth-service/helper/login.html?_ijt=hekuomjsk086gr4fllscbs76o9/callback',
+            // redirectUri ,
+        });
+        webAuth.login({
+            realm: 'Username-Password-Authentication',
+            email,
+            password,
+        });
+        webAuth.parseHash({hash: window.location.hash}, function (err, authResult) {
+            if (err) {
+                return console.log(err);
+            }
+            console.log(authResult)
+
+            webAuth.client.userInfo(authResult.accessToken, function (err, user) {
+                // Now you have the user's information
+                console.log(user)
+            });
+        });
+    }
+    redirectUri = 'http://localhost:3000'; // redirect url should be a page where extractToken is called
+    email =  'ahmedbenyahiass@gmail.com';
+    password = '6LggH^f6xQ5QW4a';
+    login(redirectUri, email, password)
+</script>
+</body>
+</html>
