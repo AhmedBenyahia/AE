@@ -1,0 +1,6 @@
+{
+  "jwtPrivateKey": "TestKey_should_be_changed_in_prod",
+  "db": "mongodb+srv://dev:AutoEcole.TN@cluster0.ftvww.mongodb.net/auto-ecole-dev-1?retryWrites=true&w=majority",
+  "email": "ahmedbenyahiakanansa@gmail.com",
+  "frontendUrl": "http://localhost:4200/"
+}
