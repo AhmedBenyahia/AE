@@ -2,27 +2,22 @@ const mongoose = require('mongoose');
 const Joi = require('joi');
 const JoiExtended = require('../startup/validation');
 
+// fullName:required,email:required, password,phone,isConfirmed,isActive,role,avatar
+
 const userSchema = new mongoose.Schema({
-    name: {
+    email: {
         type: String,
+        unique: true,
         required: true,
         minLength: 4,
         maxLength: 55,
         trim: true,
     },
-    surname: {
+    fullName: {
         type: String,
         required: true,
         minLength: 4,
         maxLength: 55,
-        trim: true,
-    },
-    username: {
-        type: String,
-        required: true,
-        minLength: 4,
-        maxLength: 55,
-        unique: true
     },
     password: {
         type: String,
@@ -44,15 +39,35 @@ const userSchema = new mongoose.Schema({
     agency: mongoose.Types.ObjectId,
 });
 
+// client account verification  token schema
+const verificationTokenSchema = new mongoose.Schema({
+    _userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+    },
+    token: {
+        type: String,
+        required: true
+    },
+    createdAt: {
+        type: Date,
+        required: true,
+        default: Date.now,
+        expires: 3600,
+    }
+});
+
+// compile the model
+const VerificationToken = mongoose.model('Token', verificationTokenSchema);
+
 function validateSchema(car) {
     const schema = JoiExtended.object({
-        name: JoiExtended.string().min(3).required(),
-        surname: JoiExtended.string().min(3).required(),
-        username: JoiExtended.string().min(2).max(15).required(),
-        password: JoiExtended.string().min(1).max(25).required(),
-        phone: JoiExtended.phone().required(),
-        isConfirmed: JoiExtended.bool().required(),
-        isActive:  JoiExtended.bool().required(),
+        email: JoiExtended.string().email().required(),
+        fullName: JoiExtended.string().min(2).max(15).required(),
+        password: JoiExtended.string().min(1).max(25),
+        phone: JoiExtended.string().phone().required(),
+        isConfirmed: JoiExtended.bool(),
+        isActive:  JoiExtended.bool(),
         role: JoiExtended.string().required(),
         avatar: JoiExtended.string().max(255),
         agency: JoiExtended.string().objectId()
@@ -63,5 +78,6 @@ function validateSchema(car) {
 const User = mongoose.model('User', userSchema);
 
 exports.userSchema = userSchema;
+exports.VerificationToken = VerificationToken;
 exports.User = User;
 exports.validate = validateSchema;
