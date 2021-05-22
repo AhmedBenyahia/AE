@@ -54,7 +54,7 @@ router.get('/whoami', authorization, async (req, res) => {
 router.get('/verify', authorization, async (req, res) => {
     authenticationDebug('Debugging jwt verification');
     authenticationDebug('   req: ', compact(req.method, req.url));
-    return res.status(200).send('The token is valid')
+    return res.status(200).send(req.user)
 });
 
 function validate(req) {
