@@ -3,6 +3,7 @@ const router = express.Router();
 const {User} = require('../model/user');
 const bcrypt = require('bcrypt');
 const Joi = require('joi');
+const JoiExtended = require('../startup/validation');
 const jwt = require('jsonwebtoken');
 const config = require('config');
 const authenticationDebug = require('debug')('auth-service:authentication');
@@ -21,12 +22,32 @@ router.post('/login', async (req, res) => {
     return res.status(400).send({message: 'Invalid email or password'});
 });
 
-// Information about the login user
+// Social media login
+router.post('/social-login', async (req, res) => {
+    authenticationDebug('Debugging /social-login');
+    // validate request body
+    const {error} = Joi.object({
+        email: JoiExtended.string().emailAdr().min(4).max(55).required(),
+        fullName: JoiExtended.string().min(2).max(15).required(),
+        phone: JoiExtended.string().phone().required(),
+        role: JoiExtended.string().required(),
+        avatar: JoiExtended.string().max(255),
+    }).validate(req.body);
+    if (error) return res.status(400).send({message: error.details[0].message});
+    // verify if user exist
+    let user = await User.findOne({email: req.body.email});
+    if (!user) {
+       user = new User(req.body);
+       await user.save();
+    }
+    return res.send(generateAuthToken(user));
+});
+
+// Information about the logged user
 router.get('/whoami', async (req, res) => {
     const user = await User.findOne({email: req.body.email});
     return res.send(user);
 });
-
 
 function validate(req) {
     const schema = Joi.object({

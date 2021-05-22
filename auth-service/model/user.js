@@ -1,8 +1,7 @@
 const mongoose = require('mongoose');
-const Joi = require('joi');
 const JoiExtended = require('../startup/validation');
 
-// fullName:required,email:required, password,phone,isConfirmed,isActive,role,avatar
+const roles = ['ADMIN', 'USER', 'CLIENT', 'SUDO', 'MONITOR']
 
 const userSchema = new mongoose.Schema({
     email: {
@@ -32,9 +31,20 @@ const userSchema = new mongoose.Schema({
         maxLength: 13,
         trim: true,
     },
-    isConfirmed: {type: Boolean,},
-    isActive: {type: Boolean,},
-    role: {type: String},
+    isConfirmed: {
+        type: Boolean,
+        default: false
+    },
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    role: {
+        type: String,
+        trim: true,
+        enum: roles,
+        required: true
+    },
     avatar: {type: String},
     agency: mongoose.Types.ObjectId,
 });
@@ -60,9 +70,10 @@ const verificationTokenSchema = new mongoose.Schema({
 // compile the model
 const VerificationToken = mongoose.model('Token', verificationTokenSchema);
 
-function validateSchema(car) {
+// user schema validation
+function validateSchema(user) {
     const schema = JoiExtended.object({
-        email: JoiExtended.string().email().required(),
+        email: JoiExtended.string().emailAdr().required(),
         fullName: JoiExtended.string().min(2).max(15).required(),
         password: JoiExtended.string().min(1).max(25),
         phone: JoiExtended.string().phone().required(),
@@ -72,7 +83,7 @@ function validateSchema(car) {
         avatar: JoiExtended.string().max(255),
         agency: JoiExtended.string().objectId()
     });
-    return schema.validate(car);
+    return schema.validate(user);
 }
 
 const User = mongoose.model('User', userSchema);
