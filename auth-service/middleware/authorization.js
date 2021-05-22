@@ -1,18 +1,18 @@
-const debug = require('debug')('scheduling-service:authorization');
-const request = require('request');
-
+const debug = require('debug')('auth-service:authorization-middleware');
+const config = require('config');
+const jwt = require('jsonwebtoken');
 
 module.exports = function (req, res, next) {
-    debug('Checking authorization')
-    request('http://localhost:8080/auth-service/verify', {json: true}, (err, res, body) => {
-        if (err) {
-            return console.log(err);
-        }
-        console.log(body);
-        console.log(body);
-    });
-    next()
-    // return res.status(403).send('Access denied. You don\'t have the right permission')
-    // return res.status(400).send(' Invalid token.');
-
+    debug('Verifying JWT token')
+    // verify the existence of the token
+    const token = req.header('Authorization');
+    if (!token) return res.status(401).send('Access denied. No token provided');
+    // verify the validation of the token
+    try {
+        req.user = jwt.verify(token.split(' ')[1], config.get('jwtPrivateKey'));
+        debug('   Token payload: user role is', req.user.role);
+        next()
+    } catch(err) {
+        return res.status(400).send(' Invalid token.') ;
+    }
 };
