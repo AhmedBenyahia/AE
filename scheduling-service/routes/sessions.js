@@ -1,383 +1,407 @@
-const {Session, validateReservation, validateApproving, validateUpdating, sessionState} = require('../model/session');
+const {Session, validateReservation, validateUpdating, sessionState} = require('../model/session');
 const {Agency} = require('../model/agency');
 const {Exam} = require('../model/exam');
-// const {Absenc} = require('../model/absence');
-const {Client, clientState} = require('../model/client');
+const {Client} = require('../model/client');
 const {Monitor} = require('../model/monitor');
 const {Car} = require('../model/car');
 const express = require('express');
 const router = express.Router();
 const validateObjectId = require('../middleware/validateObjectId');
+const validateAgencyObjectId = require('../middleware/validateAgencyObjectId');
+const authorization = require('../middleware/authorization');
 const _ = require('lodash');
 const sessionDebug = require('debug')('app:session');
-const DAY = 24*60*60*1000;
-const isFullReservation = require('../middleware/isFullReservation');
-const { adminSessionCancelingNotif, sessionReservationNotif, newSessionNotif,
-    usersSessionCancelingNotif, sessionCarUpdatedNotif, sessionDateUpdatedNotif,
-} = require('../middleware/notify');
+
 sessionDebug('session debugging is enabled');
 
 // GET ALL
-router.get('/', async (req, res) => {
-    res.send(await Session.find({ agency: req.user.agency}));
+router.get('/:agency',[authorization,validateAgencyObjectId], async (req, res) => {
+
+    res.send(await Session.find({ agency: req.params.agency}).sort({startDate: -1}));
+});
+
+
+
+// GET ALL REQUESTED
+router.get('/requested/:agency',[authorization,validateAgencyObjectId], async (req, res) => {
+
+    res.send(await Session.find({ agency: req.params.agency,state:sessionState[0]}));
+});
+
+//GET BY DATE
+router.get('/date/:agency/:startDate',[authorization,validateAgencyObjectId], async (req, res) => {
+    //res.send(new Date(req.params.startDate))
+    const start = new Date(req.params.startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(req.params.startDate);
+    end.setHours(23, 59, 59, 999);
+    res.send(
+        await Session.find(
+            {
+                agency: req.params.agency,
+                startDate:{$gte:start,$lte:end},
+                state:sessionState[0],
+            }).sort({startDate: 1}))
 });
 
 // GET BY ID
-router.get('/:id', validateObjectId, async (req, res) => {
+router.get('/:id', [authorization,validateObjectId], async (req, res) => {
     const session = await Session.findOne({_id: req.params.id, agency: req.user.agency});
     if (!session) return res.status(404).send({message: ' The session with the giving id was not found'});
     res.send(session);
 });
 
+
 // GET Client Session
-router.get('/client/:id', async (req, res) => {
+router.get('/client/:id', [authorization,validateObjectId],async (req, res) => {
     sessionDebug('debugging session/client/:id endpoint');
-    res.send(await Session.find({ 'client._id': req.params.id}));
+    res.send(await Session.find({ 'client._id': req.params.id}).sort({startDate: -1}));
 });
 
 // GET Monitor Session
-router.get('/monitor/:id', async (req, res) => {
-    res.send(await Session.find({ 'monitor._id': req.params.id}));
+router.get('/monitor/:id', [authorization,validateObjectId],async (req, res) => {
+    res.send(await Session.find({ 'monitor._id': req.params.id}).sort({startDate: -1}));
 });
 
 // Request Appointment
-router.post('/reserve', isFullReservation, async (req, res) => {
-    req.user = {agency: req.body.agency};
+router.post('/reserve', authorization,async (req, res) => {
     sessionDebug('debugging /reserve endpoint');
     // validate the request schema
     const {error} = validateReservation(req.body);
     if (error) return res.status(400).send({message: error.details[0].message});
     // verify that the agency exist
-    const agency = await Agency.findOne({_id: req.user.agency});
+    const agency = await Agency.findOne({_id: req.body.agency});
     if (!agency) return res.status(404).send({message: ' The agency with the giving id was not found'});
     // verify that the client exist
-    const client = await Client.findOne({_id: req.body.clientId, agency: req.user.agency});
+    const client = await Client.findOne({_id: req.body.client, agency: req.body.agency});
     if (!client) return res.status(404).send({message: ' The client with the giving id was not found'});
     // verify that the profile of the user is complete
-    if (client.state === clientState[1] || client.state === clientState[0])
-        return res.status(423).send({message: 'Verify and Complete your profile before reserving sessions'});
-    // verify that the client doesn't have a reservation in the same date and it's APPROVED
+    // if (client.state === clientState[1] || client.state === clientState[0])
+    //     return res.status(423).send({message: 'Verify and Complete your profile before reserving sessions'});
+    // verify that the client doesn't have a reservation in the same date and time
+
+    let start=new Date(req.body.startDate);
+    let end=new Date(req.body.endDate);
+    if(start.getDay()!==end.getDay()) return res.status(400).send({message: "The start and end date should have the same day"})
+
     let session = await Session
         .find({
-            reservationDate: req.body.reservationDate,
-            'client._id': req.body.clientId, // safer than client: client
+             startDate:{ $lte : req.body.startDate},
+             endDate:{ $gte :req.body.startDate},
+            'client._id': req.body.client,
+             state: sessionState[0],
+             agency:req.body.agency
         })
-        .or([
-            {state: sessionState[0]},
-            {state: sessionState[1]},
-            {state: sessionState[4]}, // TODO: add undo canceling if session is re-reserved
-        ]);
+    let session2 = await Session
+        .find({
+            startDate:{ $gte : req.body.startDate},
+            endDate:{ $lte :req.body.endDate},
+            'client._id': req.body.client,
+            state: sessionState[0],
+            agency:req.body.agency
+        })
     sessionDebug('Duplicated reservation with the same client and same date:', session.length !== 0);
-    if (session.length !== 0) {
+    if (session.length!==0 || session2.length!==0) {
         return res.status(400).send({message: ' The giving client has already a session on the reservation date'});
     }
+
+    const monitor = await Monitor.findOne({_id: req.body.monitor, agency: req.body.agency});
+        if (!monitor) return res.status(404).send({message: ' The monitor with the giving id was not found'});
+        // verify that the monitor is not reserved on the specified date
+        let otherSession = await Session
+            .find({
+                startDate:{ $lte : req.body.startDate},
+                endDate:{ $gte :req.body.startDate},
+                'monitor._id': req.body.monitor,
+                state: sessionState[0],
+                agency:req.body.agency
+            })
+    let otherSession2 = await Session
+        .find({
+            startDate:{ $gte : req.body.startDate},
+            endDate:{ $lte :req.body.endDate},
+            'monitor._id': req.body.monitor,
+            state: sessionState[0],
+            agency:req.body.agency
+        })
+        sessionDebug('  Duplicated reservation with the same monitor and same date:',otherSession.length !== 0, " Nbre: ", otherSession.length);
+        if (otherSession.length!==0 || otherSession2.length!==0) return res.status(400).send({message: 'The giving monitor is not available on the reservation date'});
+    const car = await Car.findOne({_id: req.body.car, agency: req.body.agency});
+        if (!car) return res.status(404).send({message: ' The car with the giving id was not found'});
+        // verify that the car is not reserved on the specified date
+          otherSession = await Session
+            .find({
+                startDate:{ $lte : req.body.startDate},
+                endDate:{ $gte :req.body.startDate},
+                state: sessionState[0],
+                agency:req.body.agency,
+                'car._id': car._id
+            })
+         otherSession2 = await Session
+            .find({
+                startDate:{ $lte : req.body.startDate},
+                endDate:{ $gte :req.body.endDate},
+                state: sessionState[0],
+                agency:req.body.agency,
+                'car._id': car._id
+            })
+
+        sessionDebug('  Duplicated reservation with the same car and same date:',
+            otherSession.length !== 0, " Nbre: ", otherSession.length);
+        if (otherSession.length!==0 || otherSession2.length!==0) return res.status(400).send({message: 'The giving car is not available on the reservation date'});
     // verify that he client doesn't have an exam on the reservation date
+    const startDate=new Date(req.body.startDate).getDate();
     let exam = await Exam
         .find({
-            examDate: req.body.reservationDate,
-            'client._id': req.body.clientId, // safer than client: client
+            examDate:startDate,
+            'client._id': req.body.client, // safer than client: client
+            agency:req.body.agency
         });
     sessionDebug('Exam in the same reservationDate and same client:', exam.length !== 0);
     if (exam.length !== 0) {
         return res.status(400).send({message: ' The giving client has an exam on the reservation date'});
     }
-    // add the client, reservation to the new session
-    session = new Session({
-        client: _.pick(client, ['_id', 'name', 'surname', 'state', 'drivingLicenceType']),
-        reservationDate: req.body.reservationDate,
-        agency: req.user.agency,
-    });
-    if (req.body.isFullReservation) {
-        // verify that the car exist
-        const car = await Car.findOne({_id: req.body.carId, agency: req.user.agency});
-        if (!car) return res.status(404).send({message: ' The car with the giving id was not found'});
-        // verify that the car is not reserved on the specified date
-        let otherSession = await Session
-            .find({
-                reservationDate: session.reservationDate,
-                'car._id': car._id
-            })
-            .or([
-                {state: sessionState[0]},
-                {state: sessionState[1]},
-                {state: sessionState[4]},
-            ]);
-        sessionDebug('  Duplicated reservation with the same car and same date:',
-            otherSession.length !== 0, " Nbre: ", otherSession.length);
-        if (otherSession.length !== 0) return res.status(400).send({message: 'The giving car is not available on the reservation date'});
-        // verify that the monitor exist
-        const monitor = await Monitor.findOne({_id: req.body.monitorId, agency: req.user.agency});
-        if (!monitor) return res.status(404).send({message: ' The monitor with the giving id was not found'});
-        // verify that the monitor is not reserved on the specified date
-        otherSession = await Session
-            .find({
-                reservationDate: session.reservationDate,
-                'monitor._id': monitor._id
-            })
-            .or([
-                {state: sessionState[0]},
-                {state: sessionState[1]},
-                {state: sessionState[4]},
-            ]);
-        sessionDebug('  Duplicated reservation with the same monitor and same date:',
-            otherSession.length !== 0, " Nbre: ", otherSession.length);
-        if (otherSession.length !== 0) return res.status(400).send({message: 'The giving monitor is not available on the reservation date'});
-
-        // add the car and monitor if the session isFullReservation
-        session.car = _.pick(car, ['_id', 'num', 'mark', 'model']);
-        session.monitor = _.pick(monitor, ['_id', 'name', 'surname', 'certification', 'cin']);
+     exam = await Exam
+        .find({
+            examDate:startDate,
+            'car._id': req.body.car, // safer than client: client
+            agency:req.body.agency
+        });
+    sessionDebug('Exam in the same reservationDate and same car:', exam.length !== 0);
+    if (exam.length !== 0) {
+        return res.status(400).send({message: ' The giving car in exam on the reservation date'});
     }
-    // send notification to admin
-    // await sessionReservationNotif(req, session); //TODO: uncomment this
+    exam = await Exam
+        .find({
+            examDate:startDate,
+            'monitor._id': req.body.monitor, // safer than client: client
+            agency:req.body.agency
+        });
+    sessionDebug('Exam in the same reservationDate and same monitor:', exam.length !== 0);
+    if (exam.length !== 0) {
+        return res.status(400).send({message: ' The giving monitor has an exam on the reservation date'});
+    }
+    // add the client, reservation to the new session
+    const mont={
+        _id:monitor._id,
+        name:monitor.name,
+        surname:monitor.surname,
+        certification:monitor.certification ? monitor.certification.certificationType:""
+    };
+    session = new Session({
+        client: _.pick(client, ['_id','name', 'surname', 'state', 'drivingLicenceType']),
+        monitor:mont,
+        car:_.pick(car, ['_id','num', 'mark', 'model']),
+        startDate: req.body.startDate,
+        endDate:req.body.endDate,
+        agency: req.body.agency,
+
+    });
     // save the new session
     await session.save();
     // send the response
     res.send(session);
 });
 
-// Approve Appointment Reservation
-router.patch('/approve/:id', async (req, res) => {
-    sessionDebug('debugging /approve endpoint');
-    // validate the request schema
-    const {error} = validateApproving(req.body);
-    if (error) return res.status(400).send({message: error.details[0].message});
-    // verify that the session exist
-    let session = await Session.findOne({ _id: req.params.id, agency: req.user.agency});
-    if (!session) return res.status(404).send({message: ' The session with the giving id was not found'});
-    // verify if the state of the session is REQUESTED
-    sessionDebug('  Session State: ', session.state);
-    if (session.state !== sessionState[0]) return res.status(406).send({message: 'Only approve session with REQUESTED state'});
-    // verify that the car exist
-    const car = await Car.findOne({_id: req.body.carId, agency: req.user.agency});
-    if (!car) return res.status(404).send({message: ' The car with the giving id was not found'});
-    let otherSession = await Session
-        .find({
-            reservationDate: session.reservationDate,
-            'car._id': car._id
-        })
-        .or([
-            {state: sessionState[1]},
-            {state: sessionState[3]},
-        ]);
-    sessionDebug('  Duplicated reservation with the same car and same date:',
-        otherSession.length !== 0," Nbre: ", otherSession.length);
-    if (otherSession.length !== 0) return res.status(400).send({message: 'The giving car is not available on the reservation date'});
-    // verify that the car is not reserved on the specified date By Exam
-    let exam = await Exam
-        .find({
-            examDate: session.reservationDate,
-            'car._id': car._id
-        });
-    sessionDebug('  Exam in the same date for the specified car:',
-        exam.length !== 0," Nbre: ", exam.length);
-    if (exam.length !== 0) return res.status(400).send({message: 'The giving car has am exam on the reservation date'});
-    // verify that the monitor exist
-    const monitor = await Monitor.findOne({_id: req.body.monitorId, agency: req.user.agency});
-    if (!monitor) return res.status(404).send({message: ' The monitor with the giving id was not found'});
-    // verify that the monitor is not reserved on the specified date By Session
-    otherSession = await Session
-        .find({
-            reservationDate: session.reservationDate ,
-            'monitor._id': monitor._id
-        })
-        .or([
-            {state: sessionState[1]},
-            {state: sessionState[4]},
-        ]);
-    sessionDebug('  Duplicated reservation with the same monitor and same date:',
-        otherSession.length !== 0," Nbre: ", otherSession.length);
-    if (otherSession.length !== 0) return res.status(400).send({message: 'The giving monitor is not available on the reservation date'});
-    // verify that the monitor is not reserved on the specified date By Exam
-    exam = await Exam
-        .find({
-            examDate: session.reservationDate ,
-            'monitor._id': monitor._id
-        });
-    sessionDebug('  Exam for the specified monitor in the same date of the reservation:',
-        exam.length !== 0," Nbre: ", exam.length);
-    if (exam.length !== 0) return res.status(400).send({message: 'The giving monitor has an exam on the reservation date'});
-    // verify that the monitor is not absence on the reservationDate
-    const absence = await Absenc
-        .find({
-            debDate: { $lte: session.reservationDate},
-            endDate: { $gte: session.reservationDate},
-            'monitor._id': monitor._id
-        });
-    sessionDebug('  The specified monitor is absence on the reservation date:',
-        absence.length !== 0," Nbre: ", absence.length);
-    if (absence.length !== 0) return res.status(400).send({message: 'The giving monitor is absence on the reservation date'});
-    // update the session
-    session.car =  _.pick(car, ['_id','num', 'mark', 'model']);
-    session.monitor = _.pick(monitor, ['_id','name', 'surname', 'certification', 'cin']);
-    session.state = sessionState[1];
-    await session.save();
-    // send notification the client and monitor
-    await newSessionNotif(req, session, session.monitor._id);
-    await newSessionNotif(req, session, session.client._id);
-    res.send(session);
-});
 
 
 // REJECT Appointment
-router.delete('/reject/:id', validateObjectId, async (req, res) => {
+router.delete('/reject/:id', [authorization,validateObjectId], async (req, res) => {
     sessionDebug('Debugging /session/reject/:id');
-    const session = await Session.findOne({ _id: req.params.id, agency: req.user.agency });
+    const session = await Session.findOne({ _id: req.params.id, agency: req.body.agency });
     // if the session was not found return an error
     if (!session) return res.status(404).send({message: ' The session with the giving id was not found'});
     // if the status of the session is REQUESTED
-    if (session.state === sessionState[0]){
-        await session.delete();
-        return res.send(session);
-    }
-    return res.status(409).send({message: 'deleting is allowed only if the session is in REQUESTING state '});
+    await session.delete();
+    return res.send(session);
+
 });
 
 // UPDATE Session: change monitor, car or date
 // NOTE: the patch will not pass unless all the passed value are verified
 // TODO: Refactor this method
-router.patch('/update/:id', validateObjectId, async (req, res) => {
-    sessionDebug('Debugging /update/:id session endpoint');
+router.patch('/update/:id', [authorization,validateObjectId], async (req, res) => {
+    sessionDebug('debugging /reserve endpoint');
     // validate the request schema
     const {error} = validateUpdating(req.body);
     if (error) return res.status(400).send({message: error.details[0].message});
-    // verify the existence of the session
-    let session = await Session.findOne({ _id: req.params.id, agency: req.user.agency});
-    if (!session) return res.status(404).send({message: ' The session with the giving id was not found'});
-    // verify if the state of the session is APPROVED or FINISHED
-    sessionDebug('  session state:', session.state);
-    if (!([sessionState[1], sessionState[3]].find(c => c === session.state))) {
-        return res.status(406).send({message: 'Only update session with APPROVED, PENDING or FINISHED state'});
-    }
-    // get the reservation date form the request body if provided, or from the session in the db
-    let  reservationDate = (req.body.reservationDate)
-        ? req.body.reservationDate
-        : session.reservationDate;
-    // save the old reservationDate we will need to notification
-    const oldReservationDate = session.reservationDate;
-    // get the monitor id from the request body if provided , or from the session in the db
-    let  monitorId = (req.body.monitorId)
-        ? req.body.monitorId
-        : session.monitor._id;
-    // save the old monitor we will need to notification
-    const oldMonitorId = session.monitor._id;
-    // get the car id from the request body if provided , or from the session in the db
-    let  carId = (req.body.carId)
-        ? req.body.carId
-        : session.car._id;
-    // save the old car we will need to notification
-    const oldCarId = session.car._id;
-    // verify that the car exist
-    const car = await Car.findOne({_id: carId, agency: req.user.agency});
-    sessionDebug('  we are updating the session with this car: ', carId);
-    if (!car) return res.status(404).send({message: ' The car with the giving id was not found'});
-    // verify that the car is not reserved on the reservation date
-    // By session
-    let otherSession = await Session.find({
-        reservationDate: reservationDate,
-        'car._id': car._id
-    });
-    if (otherSession.length > 1) return res.status(400).send({message: 'The giving car is not available on the reservation date'});
-    // By an exam
-    let exam = await Exam.find({
-        examDate: reservationDate,
-        'car._id': car._id
-    });
-    sessionDebug('  Exam in the same date for the specified car:',
-        exam.length !== 0," Nbre: ", exam.length);
-    if (exam.length !== 0) return res.status(400).send({message: 'The giving car has am exam on the reservation date'});
+    // verify that the agency exist
+    const agency = await Agency.findOne({_id: req.body.agency});
+    if (!agency) return res.status(404).send({message: ' The agency with the giving id was not found'});
+    // verify that the client exist
+    const client = await Client.findOne({_id: req.body.client, agency: req.body.agency});
+    if (!client) return res.status(404).send({message: ' The client with the giving id was not found'});
+    // verify that the profile of the user is complete
+    // if (client.state === clientState[1] || client.state === clientState[0])
+    //     return res.status(423).send({message: 'Verify and Complete your profile before reserving sessions'});
+    // verify that the client doesn't have a reservation in the same date and time
 
-    // verify that the monitor exist
-    const monitor = await Monitor.findOne({_id: monitorId, agency: req.user.agency});
-    sessionDebug('  we are updating the session with this monitor: ', monitorId);
+    const verifiedSession = await Session.findOne({_id: req.params.id, agency: req.body.agency});
+    // if the exam wan not found return an error
+    if (!verifiedSession) return res.status(404).send({message: ' The session with the giving id was not found'});
+
+    let start=new Date(req.body.startDate);
+    let end=new Date(req.body.endDate);
+    if(start.getDay()!==end.getDay()) return res.status(400).send({message: "The start and end date should have the same day"})
+
+    let session = await Session
+        .find({
+            _id:{$ne:req.params.id},
+            startDate:{ $lte : req.body.startDate},
+            endDate:{ $gte :req.body.startDate},
+            'client._id': req.body.client,
+            state: sessionState[0],
+            agency:req.body.agency
+        })
+    let session2 = await Session
+        .find({
+            _id:{$ne:req.params.id},
+            startDate:{ $gte : req.body.startDate},
+            endDate:{ $lte :req.body.endDate},
+            'client._id': req.body.client,
+            state: sessionState[0],
+            agency:req.body.agency
+        })
+    sessionDebug('Duplicated reservation with the same client and same date:', session.length !== 0);
+    if (session.length!==0 || session2.length!==0) {
+        return res.status(400).send({message: ' The giving client has already a session on the reservation date'});
+    }
+
+    const monitor = await Monitor.findOne({_id: req.body.monitor, agency: req.body.agency});
     if (!monitor) return res.status(404).send({message: ' The monitor with the giving id was not found'});
-    // verify that the monitor is not reserved on the reservation date
-    // By Session
-    otherSession = await Session.find({
-        reservationDate: reservationDate,
-        'monitor._id': monitor._id
-    });
-    if (otherSession.length > 1) return res.status(400).send({message: 'The giving monitor is not available on the reservation date'});
-    // By Exam
-    sessionDebug(monitor._id, ' -- ',reservationDate);
+    // verify that the monitor is not reserved on the specified date
+    let otherSession = await Session
+        .find({
+            _id:{$ne:req.params.id},
+            startDate:{ $lte : req.body.startDate},
+            endDate:{ $gte :req.body.startDate},
+            'monitor._id': req.body.monitor,
+            state: sessionState[0],
+            agency:req.body.agency
+        })
+    let otherSession2 = await Session
+        .find({
+            _id:{$ne:req.params.id},
+            startDate:{ $gte : req.body.startDate},
+            endDate:{ $lte :req.body.endDate},
+            'monitor._id': req.body.monitor,
+            state: sessionState[0],
+            agency:req.body.agency
+        })
+    sessionDebug('  Duplicated reservation with the same monitor and same date:',otherSession.length !== 0, " Nbre: ", otherSession.length);
+    if (otherSession.length!==0 || otherSession2.length!==0) return res.status(400).send({message: 'The giving monitor is not available on the reservation date'});
+    const car = await Car.findOne({_id: req.body.car, agency: req.body.agency});
+    if (!car) return res.status(404).send({message: ' The car with the giving id was not found'});
+    // verify that the car is not reserved on the specified date
+    otherSession = await Session
+        .find({
+            _id:{$ne:req.params.id},
+            startDate:{ $lte : req.body.startDate},
+            endDate:{ $gte :req.body.startDate},
+            state: sessionState[0],
+            agency:req.body.agency,
+            'car._id': car._id
+        })
+    otherSession2 = await Session
+        .find({
+            _id:{$ne:req.params.id},
+            startDate:{ $lte : req.body.startDate},
+            endDate:{ $gte :req.body.endDate},
+            state: sessionState[0],
+            agency:req.body.agency,
+            'car._id': car._id
+        })
+
+    sessionDebug('  Duplicated reservation with the same car and same date:',
+        otherSession.length !== 0, " Nbre: ", otherSession.length);
+    if (otherSession.length!==0 || otherSession2.length!==0) return res.status(400).send({message: 'The giving car is not available on the reservation date'});
+    // verify that he client doesn't have an exam on the reservation date
+    const startDate=new Date(req.body.startDate).getDate();
+    let exam = await Exam
+        .find({
+            examDate:startDate,
+            'client._id': req.body.client, // safer than client: client
+            agency:req.body.agency
+        });
+    sessionDebug('Exam in the same reservationDate and same client:', exam.length !== 0);
+    if (exam.length !== 0) {
+        return res.status(400).send({message: ' The giving client has an exam on the reservation date'});
+    }
     exam = await Exam
         .find({
-            examDate: reservationDate,
-            'monitor._id': monitor._id,
+            examDate:startDate,
+            'car._id': req.body.car, // safer than client: client
+            agency:req.body.agency
         });
-    sessionDebug('  Exam for the specified monitor in the same date of the reservation:',
-        exam.length !== 0," Nbre: ", exam.length);
-    if (exam.length !== 0) return res.status(400).send({message: 'The giving monitor has an exam on the reservation date'});
-    // verify that the monitor is not absence on the reservationDate
-    const absence = await Absenc
+    sessionDebug('Exam in the same reservationDate and same car:', exam.length !== 0);
+    if (exam.length !== 0) {
+        return res.status(400).send({message: ' The giving car in exam on the reservation date'});
+    }
+    exam = await Exam
         .find({
-            debDate: { $lte: reservationDate},
-            endDate: { $gte: reservationDate},
-            'monitor._id': monitor._id
+            examDate:startDate,
+            'monitor._id': req.body.monitor, // safer than client: client
+            agency:req.body.agency
         });
-    sessionDebug('  The specified monitor is absence on the reservation date:',
-        absence.length !== 0," Nbre: ", absence.length);
-    if (absence.length !== 0) return res.status(400).send({message: 'The giving monitor is absence on the reservation date'});
+    sessionDebug('Exam in the same reservationDate and same monitor:', exam.length !== 0);
+    if (exam.length !== 0) {
+        return res.status(400).send({message: ' The giving monitor has an exam on the reservation date'});
+    }
+    // add the client, reservation to the new session
+    const mont={
+        _id:monitor._id,
+        name:monitor.name,
+        surname:monitor.surname,
+        certification:monitor.certification ? monitor.certification.certificationType:""
+    };
 
-    // update the session if everything is OK
-    sessionDebug('  we are updating the session with this dare: ', reservationDate);
-    if (req.body.reservationDate) session.reservationDate = reservationDate;
-    if (req.body.carId) session.car = _.pick(car, ['num', 'mark', 'model']);
-    if (req.body.monitorId) session.monitor = _.pick(monitor, ['_id','name', 'surname', 'certification', 'cin']);
-    await session.save();
-    // send notification to everyone
-    /* Scenario */
-    // monitor changed
-    if (monitorId !== oldMonitorId) {
-        // send cancel notif to old monitor
-        await usersSessionCancelingNotif(req, session, oldMonitorId);
-        // send new session notif to the new monitor
-        await newSessionNotif(req, session, session.monitor._id);
-        // if date is updated too
-        if (oldReservationDate !== reservationDate) {
-            // send update notif to client too
-            await sessionDateUpdatedNotif(req, session, oldReservationDate, session.client._id);
-        }
-    } // only date updated
-    else if (oldReservationDate !== reservationDate) {
-        // send notif to monitor && client with the new date
-        await sessionDateUpdatedNotif(req, session, oldReservationDate, session.client._id );
-        await sessionDateUpdatedNotif(req, session, oldReservationDate, session.monitor._id );
-    }
-    // if the car is updated
-    if (oldCarId !== session.car._id) {
-        await sessionCarUpdatedNotif(req, session, session.monitor._id);
-        await sessionCarUpdatedNotif(req, session, session.client._id);
-    }
-    res.send(session);
+        verifiedSession.client= _.pick(client, ['_id','name', 'surname', 'state', 'drivingLicenceType']);
+        verifiedSession.monitor=mont;
+        verifiedSession.car=_.pick(car, ['_id','num', 'mark', 'model']);
+        verifiedSession.startDate= req.body.startDate;
+        verifiedSession.endDate=req.body.endDate;
+        verifiedSession.agency=req.body.agency;
+    // save the new session
+    await verifiedSession.save();
+    // send the response
+    res.send(verifiedSession);
 });
 
+
+
 // CANCEL Session
-router.patch('/cancel/:id', validateObjectId, async (req, res) => {
+router.patch('/cancel/:id', [authorization,validateObjectId], async (req, res) => {
     // if the session wan not found return an error
-    const session = await Session.findOne({_id: req.params.id, agency: req.user.agency});
+    const session = await Session.findOne({_id: req.params.id, agency: req.body.agency});
     if (!session) return res.status(404).send({message: ' The session with the giving id was not found'});
     // if the status of the session is REQUESTED
-    if (session.state === sessionState[0]) { // TODO: add forwarding
-        await session.delete();
-        return res.send(session);
-    }
-    // if the status of the session is APPROVED
-    if (session.state === sessionState[1]) {
-        // verify if we are 24H far from the date of the reservation
-        sessionDebug('verifying time remaining before the session is greater than 24H: ', session.reservationDate - Date.now() > DAY," ",session.reservationDate - Date.now());
-        if (session.reservationDate - Date.now() > DAY) {
-            // if so change the state of the session to canceled
-            session.state = sessionState[2];
-            await session.save();
-            adminSessionCancelingNotif(req, session);
-            return res.send(session);
-        }
-    }
-    // if the session is already canceled
-    if (session.state === sessionState[2]) {
-        return res.status(409).send({message: 'session is already canceled'});
-    }
-    return res.status(409).send({message: 'canceling is only allowed  if the session is REQUESTED or APPROVED'});
+    session.state=sessionState[1];
+    await session.save();
+    res.send(session);
+})
+router.patch('/finish/:id', [authorization,validateObjectId], async (req, res) => {
+    // if the session wan not found return an error
+    const session = await Session.findOne({_id: req.params.id, agency: req.body.agency});
+    if (!session) return res.status(404).send({message: ' The session with the giving id was not found'});
+    // if the status of the session is REQUESTED
+    session.state=sessionState[2];
+    await session.save();
+    res.send(session);
+})
+router.patch('/paid/:id',[authorization,validateObjectId], async (req, res) => {
+    // if the session wan not found return an error
+    const session = await Session.findOne({_id: req.params.id, agency: req.body.agency});
+    if (!session) return res.status(404).send({message: ' The session with the giving id was not found'});
+    // if the status of the session is REQUESTED
+    session.isPayed=true;
+    await session.save();
+    res.send(session);
+})
+
+// GET ALL CLIENT BY AGENCY
+router.get('/clients/:agency', [authorization,validateAgencyObjectId],async (req, res) => {
+    // The agency id should be fetch for the current log in user !!
+    res.send(await Client.find({ agency: req.params.agency}));
 });
 
 module.exports = router;

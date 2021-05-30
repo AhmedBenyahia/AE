@@ -151,7 +151,8 @@ function validateSchema(monitor, newMonitor) {
             drivingLicenceType: Joi.string().required(),
             drivingLicenceDate: Joi.date().required(),
             drivingLicenceNum: Joi.string().min(8).max(8).required(),
-        }).min(1),
+        }),
+        //.min(1)
         address: Joi.string().max(255).min(5),
         phone: JoiExtended.string().phone()
         .when('$condition', {
@@ -162,10 +163,12 @@ function validateSchema(monitor, newMonitor) {
             certificationType: Joi.string().required(),
             certificationDate: Joi.date().required(),
             certificationNum: Joi.string().min(8).max(8).required(),
-        }).min(1)
+        }),
+       /*
+        .min(1)
         .when('$condition', {
                 is: Joi.boolean().valid(true),
-                then: Joi.required()}), // TODO: add joi validation for monitor certification  type with enum
+                then: Joi.required()}),*/ // TODO: add joi validation for monitor certification  type with enum
         agency: JoiExtended.string().objectId().required(),
 
 });

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Joi = require('joi');
 const JoiExtended = require('../startup/validation');
+
 const fs = require('fs');
 const clientSchemaDebug = require('debug')('app:clientSchemaDebug');
 const clientState = ['UNVERIFIED','PROFILE_NOT_COMPLETED','READY','LEARNING',
@@ -138,26 +139,6 @@ clientSchema.post('findOne', async function (res) {
 // compile the model
 const Client = mongoose.model('Clients', clientSchema);
 
-// client account verification  token schema
-const verificationTokenSchema = new mongoose.Schema({
-    _clientId: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-    },
-    token: {
-        type: String,
-        required: true
-    },
-    createdAt: {
-        type: Date,
-        required: true,
-        default: Date.now,
-        expires: 3600,
-    }
-});
-// compile the model
-const VerificationToken = mongoose.model('Token', verificationTokenSchema);
-
 
 function validateSchema(client, newClient) {
     const schema = Joi.object({
@@ -231,4 +212,3 @@ exports.clientSchema = clientSchema;
 exports.Client = Client;
 exports.validate = validateSchema;
 exports.clientState = clientState;
-exports.VerificationToken = VerificationToken;

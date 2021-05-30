@@ -8,7 +8,7 @@ const app = express();
 
 app.use(logger('dev'));
 app.use(express.json());
-
+app.use(express.static('public'));
 require('./startup/config')(app);
 require('./startup/routes')(app);
 require('./startup/db')();
@@ -23,6 +23,6 @@ handleRejection();
 
 
 // Register the service in eureka register
-eurekaHelper.registerWithEureka('auth-service', process.env.PORT || '3000');
+//eurekaHelper.registerWithEureka('auth-service', process.env.PORT || '3001');
 
 module.exports = app;

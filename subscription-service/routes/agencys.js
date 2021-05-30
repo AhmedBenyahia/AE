@@ -1,22 +1,43 @@
 const express = require('express');
 const router = express.Router();
 const {Agency, validate} = require('../model/agency');
-const {Manager} =require('../model/manager');
-const bcrypt = require("bcrypt");
-const usernameGenerator = require('username-generator');
-const  passwordGenerator = require('generate-password');
-const sendMail = require('../startup/mailer');
-const debug = require('debug')('subscription-service:agency');
+const _=require('lodash');
+const {User} =require('../model/user');
+const authorization = require('../middleware/authorization');
+const adminAuthorization = require('../middleware/adminAuthorisation');
+const validateObjectId = require('../middleware/validateObjectId');
 
-router.get('/', async (req, res) => {
-    res.send(await Agency.find());
+
+router.get('/:id',[authorization,validateObjectId],async (req,res)=>{
+   try{
+       let agency=await Agency.findById(req.params.id);
+       if(!agency)
+           return res.status(404).json('Agency not found');
+       return res.status(200).json(agency);
+   }catch (error){
+       return res.status(400).send(error.message)
+   }
+
+
 });
+router.put('/:id',[authorization,validateObjectId],async (req,res)=>{
+    try{
+        const {error} = validate(req.body);
+        if (error) return res.status(400).send({message: error.details[0].message});
 
-/**
- * Create new agency with default manager. The credential of the newly created manager will be sent by email
- * TODO: update the fn to user the mail service and manager service.
- */
-router.post('/', async (req, res) => {
+        let agency=await Agency.findById(req.params.id);
+        if(!agency)
+            return res.status(404).json('Agency not found');
+        agency=_.merge(agency,req.body);
+        agency=await agency.save();
+        return res.status(200).json(agency);
+
+    }catch(error){
+        return res.status(400).send(error.message)
+    }
+})
+
+router.post('/', authorization,async (req, res) => {
     // validate the request body
     const {error} = validate(req.body);
     if (error) return res.status(400).send({message: error.details[0].message});
@@ -24,28 +45,12 @@ router.post('/', async (req, res) => {
     const agency = new Agency(req.body);
     // save the new agency in the database
     await agency.save();
-    // generate a password and hash it
-    const password = passwordGenerator.generate({ length: 10, numbers: true });
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-    // create new manager
-    const manager = new Manager({
-        username: usernameGenerator.generateUsername('-'),
-        email: agency.email,
-        password: passwordHash,
-        role: "admin",
-        agency: agency._id
-    });
-    // send the manager connection information by mail to the super admin
-    sendMail(agency.email,
-        'Ajout d\' un nouveau Manager',
-        'Un nouveau agence auto-ecole a ete ajouter, the admin information are: <br>' +
-        `Title: ${agency.title}, email: ${agency.email} <br>` +
-        `Username: ${manager.username} Password: ${password} <br>`);
-    // save the manager in database
-    await manager.save();
-    debug(`The generated manager credentials are: pass(${password}) user(${manager.username})`)
-    res.send(agency);
+    let user=await User.findById(req.user._id);
+    if(!user) return res.status(404).json('User not found');
+
+    user.agency=agency._id;
+    user.save();
+    res.send(user);
 });
 
 
