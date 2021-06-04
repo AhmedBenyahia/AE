@@ -3,10 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "nodemon bin/www"
+    "start": "nodemon bin/www",
+    "deploy": "serverless deploy"
   },
   "dependencies": {
     "auth0-js": "^9.16.0",
+    "aws-serverless-express": "^3.4.0",
     "bcrypt": "^5.0.1",
     "compression": "^1.7.4",
     "config": "^3.3.6",
@@ -27,5 +29,8 @@
     "pug": "^3.0.2",
     "winston": "^3.3.3",
     "winston-mongodb": "^5.0.7"
+  },
+  "devDependencies": {
+    "serverless": "^2.44.0"
   }
 }

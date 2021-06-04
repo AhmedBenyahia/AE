@@ -3,9 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "nodemon bin/www"
+    "start": "nodemon bin/www",
+    "deploy": "serverless deploy"
   },
   "dependencies": {
+    "aws-serverless-express": "^3.4.0",
     "bcrypt": "^5.0.1",
     "compression": "^1.7.4",
     "config": "^3.3.6",
