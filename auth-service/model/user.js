@@ -22,13 +22,13 @@ const userSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: true,
+        required: false,
         minlength: 8,
         maxlength: 255,
     },
     phone: {
         type: String,
-        required: true,
+        required: false,
         minLength: 8,
         maxLength: 13,
         trim: true,
@@ -76,7 +76,7 @@ const VerificationToken = mongoose.model('Token', verificationTokenSchema);
 function validateSchema(user) {
     const schema = JoiExtended.object({
         email: JoiExtended.string().emailAdr().required(),
-        fullName: JoiExtended.string().min(4).max(30).required(),
+        fullName: JoiExtended.string().min(4).max(55).required(),
         password: JoiExtended.string().min(7).max(20),
         phone: JoiExtended.string().phone().required(),
         /*
@@ -91,7 +91,14 @@ function validateSchema(user) {
 function validateLogin(req) {
     const schema = JoiExtended.object({
         email: JoiExtended.string().emailAdr().required(),
-        password: JoiExtended.string().min(7).max(20),
+        password: JoiExtended.string().min(7).max(50),
+    });
+    return schema.validate(req);
+}
+function validateLoginWithGoogle(req) {
+    const schema = JoiExtended.object({
+        email: JoiExtended.string().emailAdr().required(),
+        fullName: JoiExtended.string().min(4).max(55).required(),
     });
     return schema.validate(req);
 }
@@ -127,6 +134,7 @@ exports.VerificationToken = VerificationToken;
 exports.User = User;
 exports.validate = validateSchema;
 exports.validateLogin = validateLogin;
+exports.validateLoginWithGoogle = validateLoginWithGoogle;
 exports.generateAuthToken = generateAuthToken;
 exports.validateForgotPassword=validateForgotPassword;
 exports.validateResetPassword=validateResetPassword;

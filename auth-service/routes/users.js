@@ -96,11 +96,6 @@ router.post('/forgotPassword',async (req, res) => {
             subject: "Forgot Password ",
             html: forgotPasswordMailTempalte(config.get('frontendUrl')+"user/resetPassword/"+token.token,user.fullName)
         });
-        /*
-        "<b> <br>" +
-                "Hi "+user.fullName+", For reset your password  click on the following link:" +
-                "<br><br><a href='"+config.get('frontendUrl')+"user/resetPassword/"+token.token+"'>"+config.get('frontendUrl')+"user/resetPassword/"+token.token+"</a></b>"
-        * */
     }catch(err){
         return res.status(400).send({message: err.message});
 

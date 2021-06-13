@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {User,validateLogin,generateAuthToken} = require('../model/user');
+const {User,validateLogin,validateLoginWithGoogle,generateAuthToken,rolesEnum} = require('../model/user');
 const bcrypt = require('bcrypt');
 const Joi = require('joi');
 const JoiExtended = require('../startup/validation');
@@ -29,24 +29,33 @@ router.post('/login', async (req, res) => {
 });
 
 // Social media login
+//todo add some security for this api
 router.post('/social-login', async (req, res) => {
-    authenticationDebug('Debugging /social-login');
+    authenticationDebug('Debugging /login');
     // validate request body
-    const {error} = Joi.object({
-        email: JoiExtended.string().emailAdr().min(4).max(55).required(),
-        fullName: JoiExtended.string().min(2).max(15).required(),
-        phone: JoiExtended.string().phone().required(),
-        role: JoiExtended.string().required(),
-        avatar: JoiExtended.string().max(255),
-    }).validate(req.body);
+    const {error} = validateLoginWithGoogle(req.body);
     if (error) return res.status(400).send({message: error.details[0].message});
     // verify if user exist
     let user = await User.findOne({email: req.body.email});
-    if (!user) {
-        user = new User(req.body);
-        await user.save();
+
+    if(user){
+        if(!user.isActive)
+            return res.status(400).send({message: 'Your account is suspended'});
+    }else{
+         user = new User({
+            email:req.body.email,
+            fullName:req.body.fullName,
+            role:rolesEnum[1],
+            isConfirmed:true
+        });
+        try{
+            await user.save();
+        }catch(err){
+            return res.status(400).send({message: err.message});
+
+        }
     }
-    return res.send(generateAuthToken(user));
+    return res.send({user:user,authToken:generateAuthToken(user)});
 });
 
 // Information about the logged user
