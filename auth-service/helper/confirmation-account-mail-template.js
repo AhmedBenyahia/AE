@@ -279,7 +279,7 @@ module.exports=(url)=>{
         "                    <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\">\n" +
         "                        <tr>\n" +
         "                            <td class=\"logo\" style=\"text-align: center;\">\n" +
-        "                                <img src=\"https://s5h294bufj.execute-api.eu-west-3.amazonaws.com/production/logo.png\" width=\"300\">\n" +
+        "                                <img src=\"http://localhost:3001/logo.png\" width=\"300\">\n" +
         "                            </td>\n" +
         "                        </tr>\n" +
         "                    </table>\n" +
@@ -287,7 +287,7 @@ module.exports=(url)=>{
         "            </tr>\n" +
         "            <tr>\n" +
         "                <td valign=\"middle\" class=\"hero bg_white\" style=\"padding: 3em 0 2em 0;\">\n" +
-        "                    <img src=\"https://s5h294bufj.execute-api.eu-west-3.amazonaws.com/production/email.png\" alt=\"\" style=\"width:80px; max-width:100px; height: auto; margin: auto; display: block;\">\n" +
+        "                    <img src=\"http://localhost:3001/email.png\" alt=\"\" style=\"width:80px; max-width:100px; height: auto; margin: auto; display: block;\">\n" +
         "                </td>\n" +
         "            </tr>\n" +
         "            <tr>\n" +
