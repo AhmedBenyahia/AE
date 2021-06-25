@@ -13,7 +13,7 @@ module.exports = (app) => {
     // logging middleware
     app.use(logging);
     // routes middleware stack goes here
-    app.use('/', auth);
+    app.use('/auth', auth);
     app.use('/user', user);
     // handling global error
     app.use(error);

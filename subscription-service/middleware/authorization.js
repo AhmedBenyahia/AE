@@ -1,25 +1,24 @@
-const debug = require('debug')('subscription-service:authorization');
-const request = require('request');
+const debug = require('debug')('subscriber-service:authorization-middleware');
+const config = require('config');
+const jwt = require('jsonwebtoken');
+const {User} = require('../model/user');
 
-const publicRoutes = [{method: 'GET, POST', url: 'test/**'}]
-
-module.exports = async function (req, res, next) {
-    if (isPublicRoutes(req.method, req.url)) next()
-    debug('Validation JWT')
-    request.get('http://localhost:8080/auth-service/verify', {
-        headers: {'authorization': req.header('authorization')},
-        json: true
-    }, (error, response, body) => {
-        if (error || response.statusCode !== 200) {
-            debug(error);
-            return next() //TODO: Fix the isssue related to the proxy and remove this line
-            // return res.status(401).send('Full authentication is required');
-        }
-        req.token = body
+module.exports =async function (req, res, next) {
+    debug('Verifying JWT token')
+    // verify the existence of the token
+    const token = req.header('Authorization');
+    if (!token) return res.status(401).send({message:'Access denied. No token provided'});
+    // verify the validation of the token
+    try {
+        req.user = jwt.verify(token.split(' ')[1], config.get('jwtPrivateKey'));
+        debug('   Token payload: user role is', req.user.role);
+        const user = await User.findOne({email: req.user.email});
+        //todo test
+        if (!user ) return res.status(401).send({message: 'User not found'});
+        if(!user.isActive) return res.status(401).send({message: 'Your account is suspended'});
+        if(!user.isConfirmed) return res.status(401).send({message: 'Your account not confirmed yet'});
         next()
-    });
+    } catch(err) {
+        return res.status(401).send({message:' Access denied. Invalid token'}) ;
+    }
 };
-
-function isPublicRoutes(method, url) {
-    return publicRoutes.filter(c => (c.method.includes(method) || c.method === '*') && url.includes(c.url.split('**')[0])).length;
-}

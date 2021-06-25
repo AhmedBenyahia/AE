@@ -1,4 +1,4 @@
-const {User, validate, VerificationToken} = require('../model/user');
+const {User, validate,validateForgotPassword,validateResetPassword,VerificationToken,rolesEnum} = require('../model/user');
 const express = require('express');
 const router = express.Router();
 const validateObjectId = require('../middleware/validateObjectId');
@@ -8,18 +8,12 @@ const _ = require('lodash');
 const crypto = require('crypto');
 const JoiExtended = require('../startup/validation');
 const sendMail = require('../startup/mailer');
+const transporter = require('../startup/nodemailer');
+const config = require('config');
+const confirmationMailTempalte=require('../helper/confirmation-account-mail-template')
+const forgotPasswordMailTempalte=require('../helper/forgot-password-mail-template')
 
-// GET ALL
-router.get('/', async (req, res) => {
-    res.send(await User.find());
-});
 
-// GET BY ID
-router.get('/:id', validateObjectId, async (req, res) => {
-    const user = await User.findOne({_id: req.params.id});
-    if (!user) return res.status(404).send({message: ' The user with the giving id was not found'});
-    res.send(user);
-});
 
 // ADD New User
 router.post('/', async (req, res) => {
@@ -34,63 +28,32 @@ router.post('/', async (req, res) => {
     let user = new User(_.omit(req.body, ['password']));
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(req.body.password, salt);
+    user.role=rolesEnum[1];
     const token = new VerificationToken({
         _userId: user._id,
         token: crypto.randomBytes(12).toString('hex')
     });
     // save the token and the user
     // save the user and the verification token
-    await user.save();
-    await token.save();
-    res.send(user);
-});
-
-// UPDATE User
-router.put('/:id', validateObjectId, async (req, res) => {
-    debugUsers('Debugging PUT:/user/:id');
-    debugUsers('    the user id is:', req.params.id);
-    // validate the request schema
-    const {error} = validate(req.body);
-    if (error) return res.status(400).send({message: error.details[0].message});
-    // update the user with the giving id
-    const user = await User.findOneAndUpdate({_id: req.params.id}, _.omit(req.body, ['password']), {new: true});
-    // if the user wan not found return an error
-    if (!user) return res.status(404).send({message: ' The user with the giving id was not found'});
-    res.send(user);
-});
-
-// UPDATE password
-router.patch('/password/:id', validateObjectId, async (req, res) => {
-    // validate the request schema
-    const {error} = JoiExtended.validate(req.body, {
-        newPassword: JoiExtended.string().min(8).max(255).required(),
-        oldPassword: JoiExtended.string().min(8).max(255).required()
-    });
-    if (error) return res.status(400).send({message: error.details[0].message});
-    // verify if user exist
-    let user = await User.findOne({ _id: req.params.id });
-    if (!user) return res.status(404).send({message: ' The user with the giving id was not found'});
-    // verify if the old password is valid
-    if (await bcrypt.compare(req.body.oldPassword, user.password)) {
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(req.body.newPassword, salt);
-        // update the user password
+    try{
         await user.save();
-        return res.send(user);
+        await token.save();
+        await transporter.sendMail({
+            from: 'DrivingScholls@gmail.com',
+            to: user.email,
+            subject: "Account Confirmation ✔",
+            text: "Hello world?", // plain text body
+            html:confirmationMailTempalte(config.get('frontendUrl')+"user/confirmation/"+token.token)
+        });
+
+    }catch(err){
+        return res.status(400).send({message: err.message});
+
     }
-    // the password is incorrect
-    res.status(401).send({message: " Incorrect password!! "});
+
+    res.send(user);
 });
 
-// Suspend the account of a user
-router.put('/suspended/:id', validateObjectId, async (req, res) => {
-    const user = await User.findOne({_id: req.params.id});
-    // if the user wan not found return an error
-    if (!user) return res.status(404).send({message: ' The user with the giving id was not found'});
-    user.isActive = false;
-    await user.save();
-    return res.send(user);
-});
 
 // Confirm account
 router.get('/confirmation/:id',validateObjectId , async (req, res) => {
@@ -110,30 +73,58 @@ router.get('/confirmation/:id',validateObjectId , async (req, res) => {
     res.send({message: 'Account has been verified, please login.'});
 });
 
-// Resend Token
-router.get('/token/resend', async (req, res) => {
-    debugUsers("Debugging /token/resend");
-    // verify the req body
-    if (!req.body.email) return res.status(400).send({message: "Email is required"});
-    // find a matching user
-    const user = await User.findOne({email: req.body.email});
-    if (!user) return res.status(404).send({message: "No user match the giving email"});
-    // find the token in the database
-    const token = await VerificationToken.findOne({_userId: user._id});
-    if (!token) return res.status(404).send({message: "Verification token not found!!"});
-    // send the verification token by mail to user
-    // sendMail(user.email,
-    //     'Confirmation de compte', //TODO: send a link to angular component
-    //     'Bonjour Veuillez vérifier votre compte en cliquant sur le lien suivant: <br>' +
-    //     `http://${config.get('frontendUrl')}/user/confirmation/` + token.token);
-    res.send({message: "The confirmation mail has been send!" + token.token});
-});
+// FORGOT PASSWORD
+router.post('/forgotPassword',async (req, res) => {
+    // validate the request schema
+    const {error} = validateForgotPassword(req.body);
+    if (error) return res.status(400).send({message: error.details[0].message});
+    // verify if the email already exist
+    const user=await User.findOne({email: req.body.email});
+    if(!user) return res.status(404).send({message:"No user Match the giving email"});
+    // save the new user
+    const token = new VerificationToken({
+        _userId: user._id,
+        token: crypto.randomBytes(12).toString('hex')
+    });
+    // save the token and the user
+    // save the user and the verification token
+    try{
+        await token.save();
+        await transporter.sendMail({
+            from: 'DrivingScholls@gmail.com',
+            to: user.email,
+            subject: "Forgot Password ",
+            html: forgotPasswordMailTempalte(config.get('frontendUrl')+"user/resetPassword/"+token.token,user.fullName)
+        });
+        /*
+        "<b> <br>" +
+                "Hi "+user.fullName+", For reset your password  click on the following link:" +
+                "<br><br><a href='"+config.get('frontendUrl')+"user/resetPassword/"+token.token+"'>"+config.get('frontendUrl')+"user/resetPassword/"+token.token+"</a></b>"
+        * */
+    }catch(err){
+        return res.status(400).send({message: err.message});
 
-// DELETE User
-router.delete('/:id', validateObjectId, async (req, res) => {
-    const user = await User.findOneAndDelete({_id: req.params.id});
-    // if the user wan not found return an error
-    if (!user) return res.status(404).send({message: ' The user with the giving id was not found'});
+    }
+
     res.send(user);
 });
+
+// RESET PASSWORD
+router.post('/resetPassword/:id', validateObjectId,async (req, res) => {
+    // validate the request schema
+    const {error} = validateResetPassword(req.body);
+    if (error) return res.status(400).send({message: error.details[0].message});
+
+    const token = await VerificationToken.findOne({token: req.params.id});
+    if (!token) return res.status(404).send({message: "Reset token was not found."});
+    // verify if the email already exist
+    const user = await User.findOne({_id: token._userId});
+    if(!user) return res.status(404).send({message:"No user Match the giving token"});
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(req.body.newPassword, salt);
+    await user.save()
+    await token.remove();
+    res.send(user);
+});
+
 module.exports = router;

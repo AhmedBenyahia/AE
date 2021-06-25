@@ -8,7 +8,7 @@ const carSchema = new mongoose.Schema({
       type: String,
       required: true,
       trim: true,
-      length: 9,
+      length: 17,
     },
     mark: {
       type: String,
@@ -28,7 +28,8 @@ const carSchema = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        length: 17,
+        minlength: 10,
+        maxlength:11
     },
     dateFirstRegistration: {
         type: Date,
@@ -58,11 +59,13 @@ const Car = mongoose.model('Cars', carSchema);
 
 function validateSchema(car) {
     const schema = JoiExtended.object({
-        num: JoiExtended.string().numPlate().required(),
+        num: JoiExtended.string().required().length(17),
         exploitationCartNum: JoiExtended.string().min(5).required(),
         exploitationCartDate: JoiExtended.date().required(),
         dateFirstRegistration: JoiExtended.date().required(),
-        serialNum: JoiExtended.string().length(17).required(),
+        serialNum: JoiExtended.string()
+            //.numPlate()
+        .required().min(10).max(11),
         mark: JoiExtended.string().min(2).max(15).required(),
         model: JoiExtended.string().min(1).max(25).required(),
         agency: JoiExtended.string().objectId().required()

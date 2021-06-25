@@ -1,24 +1,26 @@
-const {Car, validate} = require('../model/car');
+const {Car, validate,carState} = require('../model/car');
 const {Agency} = require('../model/agency');
 const express = require('express');
 const router = express.Router();
 const validateObjectId = require('../middleware/validateObjectId');
+const validateAgencyObjectId = require('../middleware/validateAgencyObjectId');
+const authorization = require('../middleware/authorization');
 const debugCars = require('debug')('scheduling-service:cars');
 
 // GET ALL
-router.get('/', async (req, res) => {
-    res.send(await Car.find({ agency: req.body.agency}));
+router.get('/:agency',[authorization,validateAgencyObjectId],async (req, res) => {
+    res.send(await Car.find({ agency: req.params.agency}));
 });
 
 // GET BY ID
-router.get('/:id', validateObjectId, async (req, res) => {
+router.get('/:id', [authorization,validateObjectId], async (req, res) => {
     const car = await Car.findOne({_id: req.params.id, agency: req.body.agency});
     if (!car) return res.status(404).send({message: ' The car with the giving id was not found'});
     res.send(car);
 });
 
 // ADD New Car
-router.post('/', async (req, res) => {
+router.post('/', authorization,async (req, res) => {
     // validate the request schema
     const {error} = validate(req.body);
     if (error) return res.status(400).send({ message: error.details[0].message});
@@ -34,7 +36,7 @@ router.post('/', async (req, res) => {
 });
 
 // UPDATE Car
-router.put('/:id', validateObjectId, async (req, res) => {
+router.put('/:id', [authorization,validateObjectId], async (req, res) => {
     debugCars("Debugging PUT:/car/:id");
     debugCars("    the car id is:", req.params.id);
     // validate the request schema
@@ -51,10 +53,18 @@ router.put('/:id', validateObjectId, async (req, res) => {
 });
 
 // DELETE Car
-router.delete('/:id', validateObjectId, async (req, res) => {
+router.delete('/:id', [authorization,validateObjectId], async (req, res) => {
     const car = await Car.findOneAndDelete({ _id: req.params.id, agency: req.body.agency});
     // if the car wan not found return an error
     if (!car) return res.status(404).send({message: ' The car with the giving id was not found'});
     res.send(car);
+});
+router.put('/suspended/:id', [authorization,validateObjectId], async (req, res) => {
+    const car = await Car.findOne({ _id: req.params.id, agency: req.body.agency});
+    // if the client wan not found return an error
+    if (!car) return res.status(404).send({message: ' The monitor with the giving id was not found'});
+    car.state = carState[1];
+    await car.save();
+    return res.send(car);
 });
 module.exports = router;

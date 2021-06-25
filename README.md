@@ -9,7 +9,7 @@ adaptation of micro-service architecture in auto-ecole. tn project
 
 ## scheduling-service
 Don't forget to set those env variable:
- `PORT=3004;DEBUG=scheduling-service:*`
+`PORT=3004;DEBUG=scheduling-service:*`
 then run the server using `npm start`
 
 ## subscription-service
@@ -22,3 +22,4 @@ To see the different available routes see: http://localhost:8080/actuator/routes
 (after running all services).
 
 For example to execute a get all client request using the proxy: `GET:http://localhost:8080/subscription-service/client`
+

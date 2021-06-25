@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const JoiExtended = require('../startup/validation');
+const jwt = require('jsonwebtoken');
+const config = require('config');
 
 const roles = ['ADMIN', 'USER', 'CLIENT', 'SUDO', 'MONITOR']
 
@@ -74,16 +76,48 @@ const VerificationToken = mongoose.model('Token', verificationTokenSchema);
 function validateSchema(user) {
     const schema = JoiExtended.object({
         email: JoiExtended.string().emailAdr().required(),
-        fullName: JoiExtended.string().min(2).max(15).required(),
-        password: JoiExtended.string().min(1).max(25),
+        fullName: JoiExtended.string().min(4).max(30).required(),
+        password: JoiExtended.string().min(7).max(20),
         phone: JoiExtended.string().phone().required(),
-        isConfirmed: JoiExtended.bool(),
+        /*
         isActive:  JoiExtended.bool(),
         role: JoiExtended.string().required(),
         avatar: JoiExtended.string().max(255),
-        agency: JoiExtended.string().objectId()
+        agency: JoiExtended.string().objectId()*/
     });
     return schema.validate(user);
+}
+
+function validateLogin(req) {
+    const schema = JoiExtended.object({
+        email: JoiExtended.string().emailAdr().required(),
+        password: JoiExtended.string().min(7).max(20),
+    });
+    return schema.validate(req);
+}
+
+function validateForgotPassword(req) {
+    const schema = JoiExtended.object({
+        email: JoiExtended.string().emailAdr().required(),
+    });
+    return schema.validate(req);
+}
+function validateResetPassword(req) {
+    const schema = JoiExtended.object({
+        newPassword: JoiExtended.string().required(),
+        confirmPassword: JoiExtended.string().required(),
+    });
+    return schema.validate(req);
+}
+
+function generateAuthToken(user) {
+    return jwt.sign({
+            _id: user._id,
+            email: user.email,
+            role: user.role,
+            agency: user.agency,
+        }, config.get('jwtPrivateKey')
+    );
 }
 
 const User = mongoose.model('User', userSchema);
@@ -92,3 +126,8 @@ exports.userSchema = userSchema;
 exports.VerificationToken = VerificationToken;
 exports.User = User;
 exports.validate = validateSchema;
+exports.validateLogin = validateLogin;
+exports.generateAuthToken = generateAuthToken;
+exports.validateForgotPassword=validateForgotPassword;
+exports.validateResetPassword=validateResetPassword;
+exports.rolesEnum=roles;
