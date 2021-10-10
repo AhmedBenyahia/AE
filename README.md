@@ -1,4 +1,4 @@
-# Driving School managmenet system: Backend Repo [![Deployment](https://github.com/SlaySayto/AE/actions/workflows/main.yml/badge.svg)](https://github.com/SlaySayto/AE/actions/workflows/main.yml)
+# Driving School managmenet system:  Backend Repo [![Deployment](https://github.com/SlaySayto/AE/actions/workflows/main.yml/badge.svg)](https://github.com/SlaySayto/AE/actions/workflows/main.yml)
 [DEMO](http://auto-ecole.tn.s3-website.eu-west-3.amazonaws.com/companies/60b802626730d700090951b2/dashboard)
 
 [![Contributors][contributors-shield]][contributors-url]
